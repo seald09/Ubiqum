@@ -1,0 +1,67 @@
+#Caret package installed 
+library(caret)
+library(readxl)
+Survey<-read_excel("/Users/deborshiseal/Downloads/Survey_Key_and_Complete_Responses_excel.xlsx",sheet="Survey Results Complete")
+
+#Factoring values
+Survey$elevel<-as.factor(Survey$elevel)
+Survey$car<-as.factor(Survey$car)
+Survey$zipcode<-as.factor(Survey$zipcode)
+Survey$brand<-as.factor(Survey$brand)
+
+#check p values for seeing if attributes are correlated 
+library(MASS)       # load the MASS package
+tbl = table(Survey$zipcode, Survey$brand) #check for p values less than 0.05 for dependant variable with other variables
+tbl                 # the contingency table
+chisq.test(tbl)
+#we find out salary and brand correlated. Since brand is the dependant variable, we definitely keep salary
+
+#selecting attributes
+Survey$elevel<-NULL
+Survey$credit<-NULL
+Survey$car<-NULL
+Survey$zipcode<-NULL 
+
+set.seed(123)
+
+#Partitioning Data
+inTraining<-createDataPartition(Survey$brand,p=0.75,list=FALSE)
+training<-Survey[inTraining,]
+testing<-Survey[-inTraining,]
+
+#setup cross validation, 10 folds, 10 times
+fitControl<-trainControl(method="repeatedcv",number=10, repeats=10)
+
+#Training the model using knn
+LMFit3<-train(brand~.,data=training,method="knn",trcontrol=fitControl,tunelength=50)
+LMFit3
+
+#Training the model using Random Forest
+LMFit2<-train(brand~.,data=training,method="rf",trcontrol=fitControl,tunelength=50)
+LMFit2
+
+#Using trained model on test data
+testPredLM1<-predict(LMFit2,testing)
+postResample(testPredLM1,testing$brand)
+plot(testPredLM1,testing$brand)
+
+#Using trained model to make predictions on unlabeled data
+SurveyIncomplete<-read.csv("/Users/deborshiseal/Downloads/SurveyIncomplete.csv")
+SurveyIncomplete$Predictions<-predict(LMFit2,SurveyIncomplete)
+
+SurveyIncomplete$Predictions
+plot(SurveyIncomplete$Predictions)
+
+#using ggplot to plot data
+ggplot(SurveyIncomplete, aes(x= age, y = salary, color = Predictions)) + 
+  geom_point()
+
+#renaming 0 and 1 to Acer and Sony
+library(plyr)
+SurveyIncomplete$Predictions <- revalue(SurveyIncomplete$Predictions, c("0"="Acer", "1"="Sony"))
+
+plot <- ggplot(SurveyIncomplete, aes(x= age, y = salary, color = Predictions)) + 
+  geom_point() 
+plot <- plot + scale_fill_discrete(name = "Brand Preference", breaks = c(0,1), labels=c("Acer","Sony"))
+plot
+
